@@ -25,6 +25,9 @@ describe('ServerlessPlugin', function () {
     this.ServerlessPlugin = proxyquire('../', this.requireStubs)
 
     this.serverless = {
+      configSchemaHandler: {
+        defineFunctionProperties: this.sandbox.stub(),
+      },
       cli: {
         log: this.sandbox.stub(),
       },
@@ -35,6 +38,7 @@ describe('ServerlessPlugin', function () {
           },
         },
         provider: {},
+        functions: {},
       },
     }
     this.options = {}
@@ -368,6 +372,35 @@ describe('ServerlessPlugin', function () {
         env1: envVars.env1,
         env2: envVars.env2,
       })
+    })
+
+    it('if config.separate is set, set specified env on each function', function() {
+      const fileName = '.env'
+      const envVars = {
+        env1: 'env1value',
+        env2: 'env2value',
+        env3: 'env3value',
+      }
+
+      this.serverless.service.custom.dotenv.separate = true
+      this.serverless.service.functions.testFn = {
+        'dotenv': {
+          'environment': Object.keys(envVars),
+        },
+      }
+
+      this.resolveEnvFileNames.withArgs(this.env).returns([fileName])
+      this.requireStubs.dotenv.config
+        .withArgs({ path: fileName })
+        .returns({ parsed: envVars })
+
+      this.requireStubs['dotenv-expand']
+        .withArgs({ parsed: envVars })
+        .returns({ parsed: envVars })
+
+      this.plugin.loadEnv(this.env)
+
+      this.serverless.service.functions.testFn.environment.should.deep.equal(envVars)
     })
   })
 })

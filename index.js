@@ -1,5 +1,3 @@
-'use strict'
-
 const dotenv = require('dotenv')
 const dotenvExpand = require('dotenv-expand')
 const chalk = require('chalk')
@@ -22,7 +20,21 @@ class ServerlessPlugin {
         : true
     this.required = (this.config && this.config.required) || {}
 
+    this.applySchemaExtensions()
     this.loadEnv(this.getEnvironment(options))
+  }
+
+  applySchemaExtensions() {
+    this.serverless.configSchemaHandler.defineFunctionProperties(
+      this.serverless.service.provider.name, {
+        properties: {
+          'dotenv': {
+            type: 'object', properties: {
+              'environment': { type: 'array' },
+            },
+          },
+        },
+      })
   }
 
   /**
@@ -113,12 +125,29 @@ class ServerlessPlugin {
               delete envVars[key]
             })
         }
-        Object.keys(envVars).forEach((key) => {
-          if (this.logging) {
-            this.serverless.cli.log('\t - ' + key)
-          }
-          this.serverless.service.provider.environment[key] = envVars[key]
-        })
+
+        if (this.config.separate) {
+          Object.entries(this.serverless.service.functions)
+            // ignore without envWhitelist
+            .filter(([key, fn]) => fn['dotenv'] && fn['dotenv']['environment'])
+            // populate functionName.environment object with envKey and envValue from envWhitelist
+            .forEach(([key, fn]) => {
+              const envWhitelist = fn['dotenv']['environment']
+              this.serverless.service.functions[key].environment =
+                envWhitelist.reduce((fnEnvironment, whiteListedKey) => {
+                  fnEnvironment[whiteListedKey] = envVars[whiteListedKey]
+                  return fnEnvironment
+                }, fn.environment || {})
+            })
+        } else {
+          Object.keys(envVars).forEach((key) => {
+            if (this.logging) {
+              this.serverless.cli.log('\t - ' + key)
+            }
+            this.serverless.service.provider.environment[key] = envVars[key]
+          })
+        }
+
       } else {
         const errorMsg = 'DOTENV: Could not find .env file.'
 
